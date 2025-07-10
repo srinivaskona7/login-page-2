@@ -1,8 +1,8 @@
 import axios from 'axios';
 
 // Base URLs for different services
-const USER_SERVICE_URL = process.env.REACT_APP_USER_SERVICE_URL || 'http://localhost:3001';
-const COURSE_SERVICE_URL = process.env.REACT_APP_COURSE_SERVICE_URL || 'http://localhost:3002';
+const USER_SERVICE_URL = process.env.REACT_APP_USER_API_URL || process.env.REACT_APP_USER_SERVICE_URL || 'http://localhost:5001';
+const COURSE_SERVICE_URL = process.env.REACT_APP_COURSE_API_URL || process.env.REACT_APP_COURSE_SERVICE_URL || 'http://localhost:5002';
 
 // Create axios instances for different services
 const userServiceAPI = axios.create({

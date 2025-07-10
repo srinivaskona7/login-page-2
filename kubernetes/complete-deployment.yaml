@@ -1,5 +1,5 @@
 # Complete Kubernetes Deployment for Login Page Microservices
-# This single file contains all necessary resources for the entire application
+# Updated with Docker Hub images and email credentials
 
 apiVersion: v1
 kind: Namespace
@@ -17,23 +17,23 @@ metadata:
   namespace: login-microservices
 data:
   # Database Configuration
-  MONGODB_DATABASE: "loginapp"
+  MONGODB_DATABASE: "your_db_name"
   MONGODB_AUTH_SOURCE: "admin"
   
   # Service Ports
-  USER_SERVICE_PORT: "3001"
-  COURSE_SERVICE_PORT: "3002"
-  NOTIFICATION_SERVICE_PORT: "3003"
+  USER_SERVICE_PORT: "5001"
+  COURSE_SERVICE_PORT: "5002"
+  NOTIFICATION_SERVICE_PORT: "5003"
   FRONTEND_PORT: "3000"
   
   # Internal Service URLs (Kubernetes DNS)
-  USER_SERVICE_URL: "http://user-service.login-microservices.svc.cluster.local:3001"
-  COURSE_SERVICE_URL: "http://course-service.login-microservices.svc.cluster.local:3002"
-  NOTIFICATION_SERVICE_URL: "http://notification-service.login-microservices.svc.cluster.local:3003"
+  USER_SERVICE_URL: "http://user-service.login-microservices.svc.cluster.local:5001"
+  COURSE_SERVICE_URL: "http://course-service.login-microservices.svc.cluster.local:5002"
+  NOTIFICATION_SERVICE_URL: "http://notification-service.login-microservices.svc.cluster.local:5003"
   
   # External Service URLs (for frontend)
-  REACT_APP_USER_SERVICE_URL: "http://user-service:3001"
-  REACT_APP_COURSE_SERVICE_URL: "http://course-service:3002"
+  REACT_APP_USER_API_URL: "http://localhost:5001"
+  REACT_APP_COURSE_API_URL: "http://localhost:5002"
   
   # Application Settings
   NODE_ENV: "production"
@@ -53,17 +53,21 @@ metadata:
 type: Opaque
 data:
   # MongoDB credentials (base64 encoded)
-  # To encode: echo -n "your-value" | base64
-  MONGODB_USERNAME: YWRtaW4=  # admin
-  MONGODB_PASSWORD: cGFzc3dvcmQxMjM=  # password123
+  # echo -n "root" | base64 = cm9vdA==
+  # echo -n "mongodb-password" | base64 = bW9uZ29kYi1wYXNzd29yZA==
+  MONGODB_USERNAME: cm9vdA==  # root
+  MONGODB_PASSWORD: bW9uZ29kYi1wYXNzd29yZA==  # mongodb-password
   
   # JWT Secret (base64 encoded)
+  # echo -n "your-super-secret-jwt-key-change-in-production" | base64
   JWT_SECRET: eW91ci1zdXBlci1zZWNyZXQtand0LWtleS1jaGFuZ2UtaW4tcHJvZHVjdGlvbg==
   
-  # SMTP credentials (base64 encoded - replace with your actual credentials)
-  SMTP_USER: eW91ci1lbWFpbEBnbWFpbC5jb20=  # your-email@gmail.com
-  SMTP_PASS: eW91ci1hcHAtcGFzc3dvcmQ=  # your-app-password
-  FROM_EMAIL: eW91ci1lbWFpbEBnbWFpbC5jb20=  # your-email@gmail.com
+  # Email credentials (base64 encoded)
+  # echo -n "parashuramuluchilukuri@gmail.com" | base64 = cGFyYXNodXJhbXVsdWNoaWx1a3VyaUBnbWFpbC5jb20=
+  # echo -n "evbkbefxufpegdaq" | base64 = ZXZia2JlZnh1ZnBlZ2RhcQ==
+  SMTP_USER: cGFyYXNodXJhbXVsdWNoaWx1a3VyaUBnbWFpbC5jb20=  # parashuramuluchilukuri@gmail.com
+  SMTP_PASS: ZXZia2JlZnh1ZnBlZ2RhcQ==  # evbkbefxufpegdaq
+  FROM_EMAIL: cGFyYXNodXJhbXVsdWNoaWx1a3VyaUBnbWFpbC5jb20=  # parashuramuluchilukuri@gmail.com
 
 ---
 # MongoDB PersistentVolumeClaim
@@ -134,7 +138,7 @@ spec:
         livenessProbe:
           exec:
             command:
-            - mongo
+            - mongosh
             - --eval
             - "db.adminCommand('ping')"
           initialDelaySeconds: 30
@@ -142,7 +146,7 @@ spec:
         readinessProbe:
           exec:
             command:
-            - mongo
+            - mongosh
             - --eval
             - "db.adminCommand('ping')"
           initialDelaySeconds: 5
@@ -157,7 +161,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: mongodb
+  name: mongo
   namespace: login-microservices
   labels:
     app: mongodb
@@ -191,9 +195,10 @@ spec:
     spec:
       containers:
       - name: user-service
-        image: your-registry/user-service:latest  # Replace with your actual image
+        image: sriniv7654/busybox2:user-service
+        imagePullPolicy: Always
         ports:
-        - containerPort: 3001
+        - containerPort: 5001
           name: http
         env:
         - name: NODE_ENV
@@ -226,8 +231,8 @@ spec:
             configMapKeyRef:
               name: app-config
               key: MONGODB_AUTH_SOURCE
-        - name: MONGODB_URI
-          value: "mongodb://$(MONGODB_USERNAME):$(MONGODB_PASSWORD)@mongodb.login-microservices.svc.cluster.local:27017/$(MONGODB_DATABASE)?authSource=$(MONGODB_AUTH_SOURCE)"
+        - name: MONGO_URI
+          value: "mongodb://$(MONGODB_USERNAME):$(MONGODB_PASSWORD)@mongo.login-microservices.svc.cluster.local:27017/$(MONGODB_DATABASE)?authSource=$(MONGODB_AUTH_SOURCE)"
         - name: JWT_SECRET
           valueFrom:
             secretKeyRef:
@@ -253,13 +258,13 @@ spec:
         livenessProbe:
           httpGet:
             path: /health
-            port: 3001
+            port: 5001
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
           httpGet:
             path: /health
-            port: 3001
+            port: 5001
           initialDelaySeconds: 10
           periodSeconds: 5
 
@@ -276,8 +281,8 @@ spec:
   selector:
     app: user-service
   ports:
-  - port: 3001
-    targetPort: 3001
+  - port: 5001
+    targetPort: 5001
     name: http
   type: ClusterIP
 
@@ -302,9 +307,10 @@ spec:
     spec:
       containers:
       - name: course-service
-        image: your-registry/course-service:latest  # Replace with your actual image
+        image: sriniv7654/busybox2:course-service
+        imagePullPolicy: Always
         ports:
-        - containerPort: 3002
+        - containerPort: 5002
           name: http
         env:
         - name: NODE_ENV
@@ -337,8 +343,8 @@ spec:
             configMapKeyRef:
               name: app-config
               key: MONGODB_AUTH_SOURCE
-        - name: MONGODB_URI
-          value: "mongodb://$(MONGODB_USERNAME):$(MONGODB_PASSWORD)@mongodb.login-microservices.svc.cluster.local:27017/$(MONGODB_DATABASE)?authSource=$(MONGODB_AUTH_SOURCE)"
+        - name: MONGO_URI
+          value: "mongodb://$(MONGODB_USERNAME):$(MONGODB_PASSWORD)@mongo.login-microservices.svc.cluster.local:27017/$(MONGODB_DATABASE)?authSource=$(MONGODB_AUTH_SOURCE)"
         resources:
           requests:
             memory: "256Mi"
@@ -349,13 +355,13 @@ spec:
         livenessProbe:
           httpGet:
             path: /health
-            port: 3002
+            port: 5002
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
           httpGet:
             path: /health
-            port: 3002
+            port: 5002
           initialDelaySeconds: 10
           periodSeconds: 5
 
@@ -372,8 +378,8 @@ spec:
   selector:
     app: course-service
   ports:
-  - port: 3002
-    targetPort: 3002
+  - port: 5002
+    targetPort: 5002
     name: http
   type: ClusterIP
 
@@ -398,9 +404,10 @@ spec:
     spec:
       containers:
       - name: notification-service
-        image: your-registry/notification-service:latest  # Replace with your actual image
+        image: sriniv7654/busybox2:notification-service
+        imagePullPolicy: Always
         ports:
-        - containerPort: 3003
+        - containerPort: 5003
           name: http
         env:
         - name: NODE_ENV
@@ -438,6 +445,16 @@ spec:
             secretKeyRef:
               name: app-secrets
               key: FROM_EMAIL
+        - name: SENDER_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: FROM_EMAIL
+        - name: SENDER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: SMTP_PASS
         resources:
           requests:
             memory: "256Mi"
@@ -448,13 +465,13 @@ spec:
         livenessProbe:
           httpGet:
             path: /health
-            port: 3003
+            port: 5003
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
           httpGet:
             path: /health
-            port: 3003
+            port: 5003
           initialDelaySeconds: 10
           periodSeconds: 5
 
@@ -471,8 +488,8 @@ spec:
   selector:
     app: notification-service
   ports:
-  - port: 3003
-    targetPort: 3003
+  - port: 5003
+    targetPort: 5003
     name: http
   type: ClusterIP
 
@@ -497,21 +514,26 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: your-registry/frontend:latest  # Replace with your actual image
+        image: sriniv7654/busybox2:frontend
+        imagePullPolicy: Always
         ports:
         - containerPort: 3000
           name: http
         env:
+        - name: REACT_APP_USER_API_URL
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: REACT_APP_USER_API_URL
+        - name: REACT_APP_COURSE_API_URL
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: REACT_APP_COURSE_API_URL
         - name: REACT_APP_USER_SERVICE_URL
-          valueFrom:
-            configMapKeyRef:
-              name: app-config
-              key: REACT_APP_USER_SERVICE_URL
+          value: "http://localhost:5001"
         - name: REACT_APP_COURSE_SERVICE_URL
-          valueFrom:
-            configMapKeyRef:
-              name: app-config
-              key: REACT_APP_COURSE_SERVICE_URL
+          value: "http://localhost:5002"
         resources:
           requests:
             memory: "256Mi"
@@ -580,28 +602,28 @@ spec:
           service:
             name: user-service
             port:
-              number: 3001
+              number: 5001
       - path: /api/users
         pathType: Prefix
         backend:
           service:
             name: user-service
             port:
-              number: 3001
+              number: 5001
       - path: /api/courses
         pathType: Prefix
         backend:
           service:
             name: course-service
             port:
-              number: 3002
+              number: 5002
       - path: /api/notifications
         pathType: Prefix
         backend:
           service:
             name: notification-service
             port:
-              number: 3003
+              number: 5003
 
 ---
 # HorizontalPodAutoscaler for User Service

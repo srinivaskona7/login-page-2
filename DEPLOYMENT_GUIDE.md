@@ -31,9 +31,9 @@ docker-compose down
 
 ### 2. Access the Application
 - Frontend: http://localhost:3000
-- User Service: http://localhost:3001
-- Course Service: http://localhost:3002
-- Notification Service: http://localhost:3003
+- User Service: http://localhost:5001
+- Course Service: http://localhost:5002
+- Notification Service: http://localhost:5003
 - MongoDB: localhost:27017
 
 ## Kubernetes Deployment
@@ -41,43 +41,38 @@ docker-compose down
 ### 1. Build and Push Docker Images
 ```bash
 # Build images for each service
-docker build -t your-registry/user-service:latest ./services/user-service
-docker build -t your-registry/course-service:latest ./services/course-service
-docker build -t your-registry/notification-service:latest ./services/notification-service
-docker build -t your-registry/frontend:latest ./frontend
+docker build -t sriniv7654/busybox2:user-service ./services/user-service
+docker build -t sriniv7654/busybox2:course-service ./services/course-service
+docker build -t sriniv7654/busybox2:notification-service ./services/notification-service
+docker build -t sriniv7654/busybox2:frontend ./frontend
 
 # Push to registry
-docker push your-registry/user-service:latest
-docker push your-registry/course-service:latest
-docker push your-registry/notification-service:latest
-docker push your-registry/frontend:latest
+docker push sriniv7654/busybox2:user-service
+docker push sriniv7654/busybox2:course-service
+docker push sriniv7654/busybox2:notification-service
+docker push sriniv7654/busybox2:frontend
 ```
 
 ### 2. Update Configuration
-Before deploying, update the following in `kubernetes/complete-deployment.yaml`:
+The deployment is already configured with the correct Docker Hub images:
 
 ```yaml
-# Replace with your actual container registry
-image: your-registry/user-service:latest
-image: your-registry/course-service:latest
-image: your-registry/notification-service:latest
-image: your-registry/frontend:latest
+# Docker Hub images are already configured
+image: sriniv7654/busybox2:user-service
+image: sriniv7654/busybox2:course-service
+image: sriniv7654/busybox2:notification-service
+image: sriniv7654/busybox2:frontend
 
-# Update secrets with your actual values (base64 encoded)
-data:
-  SMTP_USER: <your-base64-encoded-email>
-  SMTP_PASS: <your-base64-encoded-app-password>
-  FROM_EMAIL: <your-base64-encoded-email>
-  JWT_SECRET: <your-base64-encoded-jwt-secret>
+# Email credentials are already configured
+SMTP_USER: parashuramuluchilukuri@gmail.com
+SMTP_PASS: evbkbefxufpegdaq
 ```
 
 ### 3. Encode Secrets
-```bash
-# Encode your secrets to base64
-echo -n "your-email@gmail.com" | base64
-echo -n "your-app-password" | base64
-echo -n "your-jwt-secret-key" | base64
-```
+The secrets are already base64 encoded in the deployment file:
+- Email: `parashuramuluchilukuri@gmail.com`
+- Password: `evbkbefxufpegdaq`
+- Database: `root:mongodb-password`
 
 ### 4. Deploy to Kubernetes
 ```bash
