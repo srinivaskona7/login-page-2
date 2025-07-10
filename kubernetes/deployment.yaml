@@ -1,0 +1,531 @@
+# Complete Kubernetes Deployment for Login Page Microservices
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: login-microservices
+
+---
+# ConfigMap for application configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: login-microservices
+data:
+  # Database Configuration
+  MONGODB_DATABASE: "loginapp"
+  MONGODB_AUTH_SOURCE: "admin"
+  
+  # Service Ports
+  USER_SERVICE_PORT: "3001"
+  COURSE_SERVICE_PORT: "3002"
+  NOTIFICATION_SERVICE_PORT: "3003"
+  FRONTEND_PORT: "3000"
+  
+  # Service URLs (internal cluster communication)
+  USER_SERVICE_URL: "http://user-service:3001"
+  COURSE_SERVICE_URL: "http://course-service:3002"
+  NOTIFICATION_SERVICE_URL: "http://notification-service:3003"
+  
+  # Application Settings
+  NODE_ENV: "production"
+  BCRYPT_ROUNDS: "12"
+  
+  # SMTP Configuration
+  SMTP_HOST: "smtp.gmail.com"
+  SMTP_PORT: "587"
+
+---
+# Secrets for sensitive data
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secrets
+  namespace: login-microservices
+type: Opaque
+data:
+  # MongoDB credentials (base64 encoded)
+  MONGODB_USERNAME: YWRtaW4=  # admin
+  MONGODB_PASSWORD: cGFzc3dvcmQxMjM=  # password123
+  
+  # JWT Secret (base64 encoded)
+  JWT_SECRET: eW91ci1zdXBlci1zZWNyZXQtand0LWtleS1jaGFuZ2UtaW4tcHJvZHVjdGlvbg==
+  
+  # SMTP credentials (base64 encoded - replace with your actual credentials)
+  SMTP_USER: eW91ci1lbWFpbEBnbWFpbC5jb20=  # your-email@gmail.com
+  SMTP_PASS: eW91ci1hcHAtcGFzc3dvcmQ=  # your-app-password
+  FROM_EMAIL: eW91ci1lbWFpbEBnbWFpbC5jb20=  # your-email@gmail.com
+
+---
+# MongoDB Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb
+  namespace: login-microservices
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+      - name: mongodb
+        image: mongo:6.0
+        ports:
+        - containerPort: 27017
+        env:
+        - name: MONGO_INITDB_ROOT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: MONGODB_USERNAME
+        - name: MONGO_INITDB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: MONGODB_PASSWORD
+        - name: MONGO_INITDB_DATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: MONGODB_DATABASE
+        volumeMounts:
+        - name: mongodb-storage
+          mountPath: /data/db
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: mongodb-storage
+        persistentVolumeClaim:
+          claimName: mongodb-pvc
+
+---
+# MongoDB Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  namespace: login-microservices
+spec:
+  selector:
+    app: mongodb
+  ports:
+  - port: 27017
+    targetPort: 27017
+  type: ClusterIP
+
+---
+# MongoDB PersistentVolumeClaim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongodb-pvc
+  namespace: login-microservices
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+# User Service Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: login-microservices
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+    spec:
+      containers:
+      - name: user-service
+        image: your-registry/user-service:latest
+        ports:
+        - containerPort: 3001
+        env:
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: NODE_ENV
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: USER_SERVICE_PORT
+        - name: MONGODB_URI
+          value: "mongodb://$(MONGODB_USERNAME):$(MONGODB_PASSWORD)@mongodb:27017/$(MONGODB_DATABASE)?authSource=$(MONGODB_AUTH_SOURCE)"
+        - name: MONGODB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: MONGODB_USERNAME
+        - name: MONGODB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: MONGODB_PASSWORD
+        - name: MONGODB_DATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: MONGODB_DATABASE
+        - name: MONGODB_AUTH_SOURCE
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: MONGODB_AUTH_SOURCE
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: JWT_SECRET
+        - name: BCRYPT_ROUNDS
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: BCRYPT_ROUNDS
+        - name: NOTIFICATION_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: NOTIFICATION_SERVICE_URL
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# User Service Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: login-microservices
+spec:
+  selector:
+    app: user-service
+  ports:
+  - port: 3001
+    targetPort: 3001
+  type: ClusterIP
+
+---
+# Course Service Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: course-service
+  namespace: login-microservices
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: course-service
+  template:
+    metadata:
+      labels:
+        app: course-service
+    spec:
+      containers:
+      - name: course-service
+        image: your-registry/course-service:latest
+        ports:
+        - containerPort: 3002
+        env:
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: NODE_ENV
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: COURSE_SERVICE_PORT
+        - name: MONGODB_URI
+          value: "mongodb://$(MONGODB_USERNAME):$(MONGODB_PASSWORD)@mongodb:27017/$(MONGODB_DATABASE)?authSource=$(MONGODB_AUTH_SOURCE)"
+        - name: MONGODB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: MONGODB_USERNAME
+        - name: MONGODB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: MONGODB_PASSWORD
+        - name: MONGODB_DATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: MONGODB_DATABASE
+        - name: MONGODB_AUTH_SOURCE
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: MONGODB_AUTH_SOURCE
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3002
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3002
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# Course Service Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: course-service
+  namespace: login-microservices
+spec:
+  selector:
+    app: course-service
+  ports:
+  - port: 3002
+    targetPort: 3002
+  type: ClusterIP
+
+---
+# Notification Service Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: login-microservices
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      containers:
+      - name: notification-service
+        image: your-registry/notification-service:latest
+        ports:
+        - containerPort: 3003
+        env:
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: NODE_ENV
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: NOTIFICATION_SERVICE_PORT
+        - name: SMTP_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: SMTP_HOST
+        - name: SMTP_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: SMTP_PORT
+        - name: SMTP_USER
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: SMTP_USER
+        - name: SMTP_PASS
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: SMTP_PASS
+        - name: FROM_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: FROM_EMAIL
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3003
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3003
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# Notification Service Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  namespace: login-microservices
+spec:
+  selector:
+    app: notification-service
+  ports:
+  - port: 3003
+    targetPort: 3003
+  type: ClusterIP
+
+---
+# Frontend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: login-microservices
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: your-registry/frontend:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: REACT_APP_USER_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: USER_SERVICE_URL
+        - name: REACT_APP_COURSE_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: COURSE_SERVICE_URL
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# Frontend Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: login-microservices
+spec:
+  selector:
+    app: frontend
+  ports:
+  - port: 80
+    targetPort: 3000
+  type: LoadBalancer
+
+---
+# Ingress for external access (optional - if using ingress controller)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: login-app-ingress
+  namespace: login-microservices
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - host: login-app.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80
+      - path: /api/users
+        pathType: Prefix
+        backend:
+          service:
+            name: user-service
+            port:
+              number: 3001
+      - path: /api/courses
+        pathType: Prefix
+        backend:
+          service:
+            name: course-service
+            port:
+              number: 3002

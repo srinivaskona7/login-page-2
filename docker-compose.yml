@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:6.0
+    container_name: mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_DATABASE: loginapp
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - microservices-network
+
+  # User Service
+  user-service:
+    build: ./services/user-service
+    container_name: user-service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      MONGODB_URI: mongodb://admin:password123@mongodb:27017/loginapp?authSource=admin
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      BCRYPT_ROUNDS: 10
+      NOTIFICATION_SERVICE_URL: http://notification-service:3003
+    ports:
+      - "3001:3001"
+    depends_on:
+      - mongodb
+    networks:
+      - microservices-network
+
+  # Course Service
+  course-service:
+    build: ./services/course-service
+    container_name: course-service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3002
+      MONGODB_URI: mongodb://admin:password123@mongodb:27017/loginapp?authSource=admin
+    ports:
+      - "3002:3002"
+    depends_on:
+      - mongodb
+    networks:
+      - microservices-network
+
+  # Notification Service
+  notification-service:
+    build: ./services/notification-service
+    container_name: notification-service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3003
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 587
+      SMTP_USER: your-email@gmail.com
+      SMTP_PASS: your-app-password
+      FROM_EMAIL: your-email@gmail.com
+    ports:
+      - "3003:3003"
+    networks:
+      - microservices-network
+
+  # Frontend React App
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    restart: unless-stopped
+    environment:
+      REACT_APP_USER_SERVICE_URL: http://localhost:3001
+      REACT_APP_COURSE_SERVICE_URL: http://localhost:3002
+    ports:
+      - "3000:3000"
+    depends_on:
+      - user-service
+      - course-service
+    networks:
+      - microservices-network
+
+volumes:
+  mongodb_data:
+
+networks:
+  microservices-network:
+    driver: bridge
